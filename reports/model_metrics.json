@@ -1,0 +1,34 @@
+{
+  "logistic_regression": {
+    "precision": 0.3532,
+    "recall": 0.8,
+    "f1": 0.4901,
+    "pr_auc": 0.8103,
+    "confusion_matrix": [
+      [
+        13964,
+        520
+      ],
+      [
+        71,
+        284
+      ]
+    ]
+  },
+  "random_forest": {
+    "precision": 0.5632,
+    "recall": 0.9408,
+    "f1": 0.7046,
+    "pr_auc": 0.9376,
+    "confusion_matrix": [
+      [
+        14225,
+        259
+      ],
+      [
+        21,
+        334
+      ]
+    ]
+  }
+}
