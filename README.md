@@ -1,5 +1,8 @@
 # Fraud Detection Engine
 
+[![CI](https://github.com/dhandashreya/fraud-detection-engine/actions/workflows/ci.yml/badge.svg)](https://github.com/dhandashreya/fraud-detection-engine/actions/workflows/ci.yml)
+![License](https://img.shields.io/badge/license-MIT-blue.svg)
+
 An end-to-end fraud-detection pipeline: synthetic transaction data → SQL analysis → a
 classification model evaluated the way fraud actually has to be evaluated — on
 precision/recall, not accuracy.
@@ -31,6 +34,21 @@ python src/run_sql_report.py     # runs sql/analysis_queries.sql -> reports/sql_
 python src/eda.py                # -> reports/eda_*.png
 python src/train_model.py        # trains + evaluates models -> reports/*.png, model_metrics.json
 ```
+
+## Tests
+
+`tests/test_pipeline.py` runs the actual pipeline scripts end to end (not a
+reimplementation) and asserts on the real output: dataset scale, card-testing
+burst detection, the SQL report's contents, and a minimum performance bar on
+the trained model (recall > 0.85, PR-AUC > 0.85) — so a future change that
+silently degrades the model fails CI instead of shipping quietly.
+
+```bash
+pip install -r requirements.txt pytest
+pytest tests/ -v
+```
+
+Runs automatically on every push via [GitHub Actions](.github/workflows/ci.yml).
 
 ## Dataset
 
