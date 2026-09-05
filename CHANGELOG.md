@@ -3,6 +3,23 @@
 All notable changes to this project are documented here.
 Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.3.0]
+
+### Added
+- `src/real_data_benchmark.py` — runs the same discipline (temporal split, same
+  two models, imbalanced metrics, dollar-cost threshold sweep) on the real ULB
+  credit-card-fraud dataset (284,807 transactions, fetched from OpenML 1597 and
+  cached under `real_data/`). Writes `reports/real_data_benchmark.{md,json}` and
+  `reports/real_data_pr_curve.png`. Random Forest transfers at PR-AUC ~0.81.
+- `tests/test_real_data_benchmark.py` — opt-in (`RUN_REAL_DATA=1`), skipped in
+  the main suite because of the ~150 MB download.
+- `.github/workflows/real-data-benchmark.yml` — monthly + on-demand workflow that
+  runs the benchmark with a cached dataset and uploads the report.
+- README "Real-data benchmark" section.
+
+### Changed
+- `.gitignore`: added `real_data/`.
+
 ## [0.2.0]
 
 ### Added

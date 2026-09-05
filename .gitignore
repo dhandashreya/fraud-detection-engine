@@ -4,3 +4,4 @@ __pycache__/
 .venv/
 data/fraud.db
 models/
+real_data/

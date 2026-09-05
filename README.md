@@ -13,7 +13,9 @@ scorer that flags transactions for review.
 Public fraud datasets (e.g. Kaggle's credit-card-fraud set) are PCA-anonymized —
 the columns are literally named `V1`...`V28` with no real meaning, which makes for
 a weak SQL/EDA story. This project generates its own transaction stream instead,
-with interpretable fields and deliberately injected fraud patterns:
+with interpretable fields and deliberately injected fraud patterns — then
+[benchmarks the model on the real ULB dataset](#real-data-benchmark) to show the
+approach still holds up:
 
 - **Odd-hour transactions** (midnight–4am)
 - **Amount spikes** relative to a customer's own spending history
@@ -143,6 +145,36 @@ python src/score.py path/to/other.csv   # any CSV with the same columns
 On the full dataset it flags ~2.2% of transactions for review and, checked
 against the known labels, catches 88% of fraud at 96% precision.
 
+## Real-data benchmark
+
+`src/real_data_benchmark.py` runs the *same* discipline — temporal split, the
+same two models, imbalanced metrics, the same dollar-cost threshold sweep — on
+the canonical real-world dataset: the [ULB credit-card-fraud set](https://www.openml.org/d/1597)
+(284,807 real transactions from September 2013, 0.17% fraud). It's a check that
+the approach isn't just memorising patterns this repo injected.
+
+```bash
+python src/real_data_benchmark.py   # fetches the ~150 MB dataset from OpenML (cached)
+```
+
+Results ([`reports/real_data_benchmark.md`](reports/real_data_benchmark.md), temporal split, threshold 0.5):
+
+| Model | Precision | Recall | F1 | PR-AUC |
+|---|---|---|---|---|
+| Logistic Regression (balanced) | 0.04 | 0.89 | 0.08 | 0.75 |
+| **Random Forest (balanced)** | **0.86** | **0.77** | **0.81** | **0.81** |
+
+The Random Forest transfers: **PR-AUC 0.81** on genuinely unseen fraud, ~0.86
+precision at ~0.77 recall. Logistic Regression's recall looks fine but its
+precision collapses to 4% (1,800 false alarms) — the same model-choice lesson as
+on the synthetic data, sharper. The cost-optimal threshold only saves ~5% here
+because the Random Forest already fires so few false positives.
+
+The features are PCA components (`V1`…`V28`) with no business meaning, so there's
+no SQL/EDA layer for this dataset — that's exactly the trade-off the synthetic
+data was chosen to avoid. This is kept out of the main CI job (heavy download)
+and runs on its own [monthly workflow](.github/workflows/real-data-benchmark.yml).
+
 ## Limitations
 
 - **Synthetic data.** The fraud patterns are injected by `generate_data.py`, so
@@ -161,9 +193,10 @@ against the known labels, catches 88% of fraud at 96% precision.
 ```
 data/        generated CSVs + SQLite database (db file gitignored, regenerate via scripts)
 sql/         schema + analyst queries
-src/         pipeline scripts (data gen, shared features, load, SQL report, EDA, train, score)
+src/         pipeline scripts (data gen, shared features, load, SQL report, EDA, train, score) + real_data_benchmark
 models/      persisted model artifact (gitignored, regenerate via train_model.py)
-reports/     generated charts, SQL findings, model metrics, flagged transactions
+real_data/   downloaded ULB dataset cache (gitignored)
+reports/     generated charts, SQL findings, model metrics, flagged transactions, real-data benchmark
 ```
 
 ## Stack
