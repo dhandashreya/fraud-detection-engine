@@ -8,6 +8,22 @@ a classification model evaluated the way fraud actually has to be evaluated — 
 precision/recall and **dollar cost**, not accuracy — then turned into a runnable
 scorer that flags transactions for review.
 
+## Results at a glance
+
+The same modelling pipeline — temporal split, balanced Random Forest, evaluated on
+precision/recall/PR-AUC — run on both a synthetic dataset (built here, for the SQL
+and EDA story) and the real ULB credit-card-fraud dataset (PCA features, no
+business meaning). Random Forest, temporal split, decision threshold 0.5:
+
+| Dataset | Transactions | Fraud rate | Precision | Recall | F1 | PR-AUC | Cost-optimal threshold saves |
+|---|--:|--:|--:|--:|--:|--:|--:|
+| **Synthetic** (`train_model.py`) | 59,373 | 2.39% | 0.52 | 0.94 | 0.67 | **0.93** | 44% |
+| **Real — ULB** (`real_data_benchmark.py`) | 284,807 | 0.17% | 0.86 | 0.77 | 0.81 | **0.81** | 5% |
+
+Baseline Logistic Regression is beaten on both (PR-AUC 0.82 synthetic / 0.75 real,
+and on the real data its precision collapses to 4%). Details:
+[synthetic](#model-results) · [real](#real-data-benchmark).
+
 ## Why synthetic data
 
 Public fraud datasets (e.g. Kaggle's credit-card-fraud set) are PCA-anonymized —
