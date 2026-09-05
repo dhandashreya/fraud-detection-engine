@@ -3,9 +3,10 @@
 [![CI](https://github.com/dhandashreya/fraud-detection-engine/actions/workflows/ci.yml/badge.svg)](https://github.com/dhandashreya/fraud-detection-engine/actions/workflows/ci.yml)
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 
-An end-to-end fraud-detection pipeline: synthetic transaction data → SQL analysis → a
-classification model evaluated the way fraud actually has to be evaluated — on
-precision/recall, not accuracy.
+An end-to-end fraud-detection pipeline: synthetic transaction data → SQL analysis →
+a classification model evaluated the way fraud actually has to be evaluated — on
+precision/recall and **dollar cost**, not accuracy — then turned into a runnable
+scorer that flags transactions for review.
 
 ## Why synthetic data
 
@@ -22,7 +23,9 @@ with interpretable fields and deliberately injected fraud patterns:
 
 `seconds_since_prev_txn` is not a fabricated label — it's computed per customer
 from the actual transaction timestamps (`groupby("customer_id")["timestamp"].diff()`),
-so both the SQL queries and the model are working off a genuine feature.
+so both the SQL queries and the model are working off a genuine feature. The
+generator is fully seeded, so `python src/generate_data.py` reproduces the exact
+dataset every run.
 
 ## Pipeline
 
@@ -32,16 +35,22 @@ python src/generate_data.py      # generates data/{customers,merchants,transacti
 python src/load_to_sqlite.py     # loads CSVs into data/fraud.db
 python src/run_sql_report.py     # runs sql/analysis_queries.sql -> reports/sql_findings.md
 python src/eda.py                # -> reports/eda_*.png
-python src/train_model.py        # trains + evaluates models -> reports/*.png, model_metrics.json
+python src/train_model.py        # trains + evaluates, picks a threshold -> reports/*, models/fraud_model.joblib
+python src/score.py              # flags transactions -> reports/flagged_transactions.csv
 ```
+
+`src/features.py` holds the feature engineering shared by training and scoring, so
+the two paths can't drift apart (the classic train/serve skew bug).
 
 ## Tests
 
 `tests/test_pipeline.py` runs the actual pipeline scripts end to end (not a
-reimplementation) and asserts on the real output: dataset scale, card-testing
-burst detection, the SQL report's contents, and a minimum performance bar on
-the trained model (recall > 0.85, PR-AUC > 0.85) — so a future change that
-silently degrades the model fails CI instead of shipping quietly.
+reimplementation) and asserts on the real output: dataset scale and
+reproducibility, card-testing burst detection, the SQL report's contents, a
+minimum performance bar on the trained model (recall > 0.85, PR-AUC > 0.85), that
+the cost-optimal threshold never loses to the default 0.5, and that the persisted
+model loads and scores. A future change that silently degrades any of these fails
+CI instead of shipping quietly.
 
 ```bash
 pip install -r requirements.txt pytest
@@ -52,7 +61,7 @@ Runs automatically on every push via [GitHub Actions](.github/workflows/ci.yml).
 
 ## Dataset
 
-59,356 transactions · 2,000 customers · 300 merchants · **2.39% fraud rate**
+59,373 transactions · 2,000 customers · 300 merchants · **2.39% fraud rate**
 (realistic for card fraud — this is why accuracy is the wrong metric below)
 
 ## SQL analysis
@@ -60,35 +69,58 @@ Runs automatically on every push via [GitHub Actions](.github/workflows/ci.yml).
 Full runnable query set: [`sql/analysis_queries.sql`](sql/analysis_queries.sql) · results: [`reports/sql_findings.md`](reports/sql_findings.md)
 
 Highlights:
-- **Category risk is concentrated**: electronics, online retail, ATM withdrawals, and
-  jewelry have a 5-6% fraud rate — 15-20x higher than grocery/fuel/dining (~0.3%)
-- **73% of fraud happens between midnight and 5am**, vs. a roughly flat rate
-  the rest of the day
+- **Category risk is concentrated**: jewelry, online retail, electronics, and ATM
+  withdrawals each run a 5–6% fraud rate — ~16x higher than grocery/fuel/travel
+  (~0.3%) — and **90% of all fraud** falls in those four categories
+- **Roughly half of all fraud happens between midnight and 5am** (a 5-hour window
+  that's 21% of the day), where the fraud rate is 4.6–5.8% vs. ~1–2% the rest of
+  the day
 - A window-function query (`LAG() OVER (PARTITION BY customer_id ORDER BY timestamp)`)
   isolates card-testing bursts: customers with ≥2 transactions under 120 seconds
-  apart are fraud in the large majority of cases
+  apart are fraud in nearly every case
 - A risk-bucket validation query shows the merchant `merchant_risk_score` field
   (assigned independently of the fraud labels) does **not** actually correlate with
-  real fraud rate — a useful negative result showing category and behavior matter
-  more than a merchant's static risk score
+  real fraud rate — it sits at ~2.0–2.6% across every bucket — a useful negative
+  result showing category and behavior matter more than a merchant's static score
 
 ![Fraud rate by category and hour](reports/eda_category_hour.png)
 
 ## Model results
 
-Class imbalance (2.39% positive) makes accuracy meaningless — a model that
-predicts "not fraud" for every transaction scores 97.6% accuracy while catching
-zero fraud. Evaluated on **precision, recall, F1, and PR-AUC** instead.
+The data is split **temporally** — train on the earlier transactions, test on the
+later ones — because a random split lets the model peek at the future and flatters
+the numbers.
+
+Class imbalance (2.2% positive in the test window) makes accuracy meaningless — a
+model that predicts "not fraud" for every transaction scores ~97.8% accuracy while
+catching zero fraud. Evaluated on **precision, recall, F1, and PR-AUC** instead.
 
 | Model | Precision | Recall | F1 | PR-AUC |
 |---|---|---|---|---|
-| Logistic Regression (balanced) | 0.353 | 0.800 | 0.490 | 0.810 |
-| **Random Forest (balanced)** | **0.563** | **0.941** | **0.705** | **0.938** |
+| Logistic Regression (balanced) | 0.324 | 0.815 | 0.464 | 0.822 |
+| **Random Forest (balanced)** | **0.517** | **0.938** | **0.667** | **0.932** |
 
-The Random Forest catches **94% of fraud** while keeping precision at 56% — in a
-real deployment this is the recall/precision trade-off a fraud team would tune
-based on the cost of a missed fraud vs. the cost of a false alarm (e.g. flagging
-for manual review vs. auto-declining).
+At the default 0.5 cutoff the Random Forest catches **94% of fraud** — but at the
+cost of 285 false positives in the test window. That's the real question a fraud
+team faces, so the model doesn't stop at 0.5:
+
+### Picking the decision threshold by dollar cost
+
+`train_model.py` sweeps every threshold and scores each one against an explicit
+cost model — **$8 per false positive** (an analyst manually reviews a flagged
+legit charge) vs. **the full transaction amount per missed fraud** (the money is
+gone):
+
+| Threshold | Precision | Recall | False positives | Missed fraud $ | Expected cost |
+|---|---|---|---|---|---|
+| 0.50 (default) | 0.52 | 0.94 | 285 | \$1,256 | \$3,536 |
+| **0.85 (cost-optimal)** | **0.94** | **0.82** | **18** | \$1,826 | **\$1,970** |
+
+Moving to the cost-optimal threshold **cuts expected cost 44%**: you let through a
+bit more low-value fraud but stop drowning analysts in false alarms. The chosen
+threshold is saved with the model and used by `src/score.py`.
+
+![Decision threshold vs. precision, recall, and cost](reports/threshold_analysis.png)
 
 **Top predictive features**: transaction amount relative to the customer's own
 spending norm, raw amount, seconds since the customer's previous transaction, and
@@ -97,19 +129,47 @@ fraud signals rather than shortcutting on merchant category.
 
 ![Feature importance](reports/feature_importance.png)
 
+## Scoring new transactions
+
+`src/score.py` loads `models/fraud_model.joblib` (the fitted Random Forest + the
+cost-optimal threshold), rebuilds the same features, and writes the flagged
+transactions to `reports/flagged_transactions.csv`, highest fraud score first:
+
+```bash
+python src/score.py                     # scores data/transactions.csv
+python src/score.py path/to/other.csv   # any CSV with the same columns
+```
+
+On the full dataset it flags ~2.2% of transactions for review and, checked
+against the known labels, catches 88% of fraud at 96% precision.
+
+## Limitations
+
+- **Synthetic data.** The fraud patterns are injected by `generate_data.py`, so
+  the model is partly learning rules this project wrote. The value here is the
+  end-to-end method (SQL → cost-aware modeling → scoring), not the accuracy number.
+- **`seconds_since_prev_txn` is computed over each customer's full history**, so a
+  transaction near the temporal split "knows" about neighbours on the other side.
+  The leakage is small (it only depends on that one customer's timeline) but real.
+- **No concept drift handling or online retraining** — the model is fit once on a
+  fixed window.
+- Merchant/customer identifiers are treated as non-predictive; a production system
+  would add entity-level history and velocity features.
+
 ## Project structure
 
 ```
 data/        generated CSVs + SQLite database (db file gitignored, regenerate via scripts)
 sql/         schema + analyst queries
-src/         pipeline scripts (data gen, load, SQL report, EDA, model training)
-reports/     generated charts, SQL findings, model metrics
+src/         pipeline scripts (data gen, shared features, load, SQL report, EDA, train, score)
+models/      persisted model artifact (gitignored, regenerate via train_model.py)
+reports/     generated charts, SQL findings, model metrics, flagged transactions
 ```
 
 ## Stack
 
 Python · pandas · SQLite · scikit-learn (Logistic Regression, Random Forest) ·
-matplotlib/seaborn
+matplotlib/seaborn · joblib
 
 ## License
 
