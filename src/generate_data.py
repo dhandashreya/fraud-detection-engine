@@ -49,7 +49,7 @@ for i in range(N_BASE_TRANSACTIONS):
         ts = ts.replace(hour=int(rng.integers(0, 5)))
         amount = round(max(5, cust["avg_monthly_spend"] * rng.uniform(0.8, 4.5) / rng.integers(1, 3)), 2)
         if rng.random() < 0.6:
-            merch = merchants[merchants["category"].isin(HIGH_RISK_CATEGORIES)].sample(1).iloc[0]
+            merch = merchants[merchants["category"].isin(HIGH_RISK_CATEGORIES)].sample(1, random_state=rng).iloc[0]
     else:
         amount = round(max(1, rng.gamma(2.0, cust["avg_monthly_spend"] / 20)), 2)
 
@@ -70,7 +70,7 @@ for _ in range(N_CARD_TESTING_BURSTS):
     burst_len = int(rng.integers(2, 6))
     burst_start = start + timedelta(seconds=int(rng.integers(0, 300 * 24 * 3600)))
     for _ in range(burst_len):
-        merch = merchants[merchants["category"].isin(HIGH_RISK_CATEGORIES)].sample(1).iloc[0]
+        merch = merchants[merchants["category"].isin(HIGH_RISK_CATEGORIES)].sample(1, random_state=rng).iloc[0]
         ts = burst_start + timedelta(seconds=int(rng.integers(5, 90)))
         burst_start = ts
         rows.append({
