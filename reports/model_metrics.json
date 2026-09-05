@@ -1,33 +1,60 @@
 {
+  "split": "temporal \u2014 train on transactions before 2025-08-13 14:15, test on the 14,844 after (25%)",
+  "test_fraud_rate": 0.0219,
+  "cost_model": {
+    "false_positive": "$8 manual-review fee",
+    "false_negative": "full transaction amount (money lost)"
+  },
+  "threshold_analysis": {
+    "default_0.5": {
+      "threshold": 0.5,
+      "precision": 0.5169,
+      "recall": 0.9385,
+      "false_positives": 285,
+      "missed_frauds": 20,
+      "dollars_lost_to_missed_fraud": 1256.03,
+      "expected_cost": 3536.03
+    },
+    "cost_optimal": {
+      "threshold": 0.85,
+      "precision": 0.9371,
+      "recall": 0.8246,
+      "false_positives": 18,
+      "missed_frauds": 57,
+      "dollars_lost_to_missed_fraud": 1825.64,
+      "expected_cost": 1969.64
+    },
+    "cost_reduction_vs_default_pct": 44.3
+  },
   "logistic_regression": {
-    "precision": 0.3532,
-    "recall": 0.8,
-    "f1": 0.4901,
-    "pr_auc": 0.8103,
+    "precision": 0.3244,
+    "recall": 0.8154,
+    "f1": 0.4641,
+    "pr_auc": 0.8217,
     "confusion_matrix": [
       [
-        13964,
-        520
+        13967,
+        552
       ],
       [
-        71,
-        284
+        60,
+        265
       ]
     ]
   },
   "random_forest": {
-    "precision": 0.5632,
-    "recall": 0.9408,
-    "f1": 0.7046,
-    "pr_auc": 0.9376,
+    "precision": 0.5169,
+    "recall": 0.9385,
+    "f1": 0.6667,
+    "pr_auc": 0.9322,
     "confusion_matrix": [
       [
-        14225,
-        259
+        14234,
+        285
       ],
       [
-        21,
-        334
+        20,
+        305
       ]
     ]
   }
