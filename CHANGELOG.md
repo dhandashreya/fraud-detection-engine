@@ -3,6 +3,20 @@
 All notable changes to this project are documented here.
 Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.4.0]
+
+### Added
+- `src/explain_model.py` — SHAP (`TreeExplainer`) explainability for the Random
+  Forest: beeswarm summary, mean-|SHAP| bar chart, and a per-decision waterfall
+  for the highest-scored fraud, plus `reports/shap_findings.md`. Includes a check
+  that SHAP's top-5 ranking matches the gini top-5.
+- Test that the SHAP artifacts are produced and the top SHAP feature is a
+  behavioural amount feature, not merchant category.
+
+### Changed
+- `explain_model.py` added to the main pipeline and the end-to-end test fixture.
+- `requirements.txt`: added `shap==0.52.0`.
+
 ## [0.3.0]
 
 ### Added

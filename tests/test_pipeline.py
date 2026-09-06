@@ -26,6 +26,7 @@ def run_pipeline():
     run("src/run_sql_report.py")
     run("src/train_model.py")
     run("src/score.py")
+    run("src/explain_model.py")
 
 
 def test_data_generation_produces_expected_scale():
@@ -74,3 +75,16 @@ def test_scoring_flags_transactions_and_persists_model():
     flagged = pd.read_csv("reports/flagged_transactions.csv")
     assert len(flagged) > 0
     assert flagged["fraud_score"].between(0, 1).all()
+
+
+def test_shap_explanation_agrees_with_the_model():
+    from pathlib import Path
+    for f in ("shap_summary.png", "shap_importance.png", "shap_waterfall_fraud.png",
+              "shap_findings.md"):
+        assert Path("reports", f).exists(), f"explain_model.py did not produce {f}"
+
+    shap_importance = json.load(open("reports/shap_importance.json"))
+    top_by_shap = max(shap_importance, key=shap_importance.get)
+    # the behavioural amount features should dominate, not merchant category
+    assert top_by_shap in ("amount", "amount_vs_customer_norm")
+    assert not top_by_shap.startswith("category_")

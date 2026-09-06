@@ -55,6 +55,7 @@ python src/run_sql_report.py     # runs sql/analysis_queries.sql -> reports/sql_
 python src/eda.py                # -> reports/eda_*.png
 python src/train_model.py        # trains + evaluates, picks a threshold -> reports/*, models/fraud_model.joblib
 python src/score.py              # flags transactions -> reports/flagged_transactions.csv
+python src/explain_model.py      # SHAP explainability -> reports/shap_*
 ```
 
 `src/features.py` holds the feature engineering shared by training and scoring, so
@@ -66,9 +67,10 @@ the two paths can't drift apart (the classic train/serve skew bug).
 reimplementation) and asserts on the real output: dataset scale and
 reproducibility, card-testing burst detection, the SQL report's contents, a
 minimum performance bar on the trained model (recall > 0.85, PR-AUC > 0.85), that
-the cost-optimal threshold never loses to the default 0.5, and that the persisted
-model loads and scores. A future change that silently degrades any of these fails
-CI instead of shipping quietly.
+the cost-optimal threshold never loses to the default 0.5, that the persisted
+model loads and scores, and that the SHAP explanation agrees with the model. A
+future change that silently degrades any of these fails CI instead of shipping
+quietly.
 
 ```bash
 pip install -r requirements.txt pytest
@@ -147,6 +149,23 @@ fraud signals rather than shortcutting on merchant category.
 
 ![Feature importance](reports/feature_importance.png)
 
+## Explainability (SHAP)
+
+Gini importance says which features the forest *splits on*; it says nothing about
+direction or about a single decision. `src/explain_model.py` runs
+`shap.TreeExplainer` on the held-out test set ([`reports/shap_findings.md`](reports/shap_findings.md)):
+
+- **Direction** — a large charge relative to the customer's own norm, a short gap
+  since their previous transaction, and the rapid-repeat flag all push *toward*
+  fraud; merchant category barely moves the score once behaviour is accounted for.
+- **Consistency** — SHAP's top 5 features match the gini top 5 (5/5), a check that
+  the explanation reflects the model rather than the method.
+- **Per-decision** — a waterfall plot decomposes the single highest-scored fraud
+  into each feature's exact contribution, which is what an analyst reviewing a
+  flagged transaction actually needs.
+
+![SHAP beeswarm](reports/shap_summary.png)
+
 ## Scoring new transactions
 
 `src/score.py` loads `models/fraud_model.joblib` (the fitted Random Forest + the
@@ -209,16 +228,16 @@ and runs on its own [monthly workflow](.github/workflows/real-data-benchmark.yml
 ```
 data/        generated CSVs + SQLite database (db file gitignored, regenerate via scripts)
 sql/         schema + analyst queries
-src/         pipeline scripts (data gen, shared features, load, SQL report, EDA, train, score) + real_data_benchmark
+src/         pipeline scripts (data gen, shared features, load, SQL report, EDA, train, score, explain) + real_data_benchmark
 models/      persisted model artifact (gitignored, regenerate via train_model.py)
 real_data/   downloaded ULB dataset cache (gitignored)
-reports/     generated charts, SQL findings, model metrics, flagged transactions, real-data benchmark
+reports/     generated charts, SQL findings, model metrics, flagged transactions, SHAP plots, real-data benchmark
 ```
 
 ## Stack
 
 Python · pandas · SQLite · scikit-learn (Logistic Regression, Random Forest) ·
-matplotlib/seaborn · joblib
+SHAP · matplotlib/seaborn · joblib
 
 ## License
 

@@ -1,0 +1,19 @@
+{
+  "amount_vs_customer_norm": 0.1563,
+  "amount": 0.13098,
+  "seconds_since_prev_txn": 0.085855,
+  "is_rapid_repeat": 0.068703,
+  "hour_of_day": 0.056394,
+  "category_electronics": 0.016028,
+  "category_online_retail": 0.009122,
+  "category_entertainment": 0.009113,
+  "category_grocery": 0.008736,
+  "category_jewelry": 0.007259,
+  "category_fuel": 0.007172,
+  "category_dining": 0.006328,
+  "category_travel": 0.005911,
+  "category_atm_withdrawal": 0.0041,
+  "category_utilities": 0.003036,
+  "merchant_risk_score": 0.001852,
+  "day_of_week": 0.001168
+}
